@@ -1,0 +1,161 @@
+$ink: #292b2a;
+$paper: #efe9d8;
+$paper-dim: #e5ddc3;
+$line: #c6bd9d;
+$brass: #b6862c;
+$brass-dark: #805f24;
+$text: #1c2620;
+$muted: #6b6252;
+
+.auth-page {
+  min-height: 100vh;
+  min-height: 100dvh;
+  min-width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 24px;
+  color: #ecebe3;
+  background: radial-gradient(circle at 20% 0%, #343635 0%, $ink 55%);
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.form-container {
+  width: 100%;
+  max-width: 400px;
+  margin: 40px auto;
+  padding: 40px 32px;
+  background: $paper;
+  border-top: 3px solid $brass;
+  border-radius: 3px;
+  box-shadow:
+    0 1px 0 rgba(#000, 0.4),
+    0 18px 30px -20px rgba(#000, 0.65);
+
+  h1 {
+    margin-bottom: 28px;
+    color: $text;
+    font-family: Lora, Georgia, serif;
+    font-size: 1.8rem;
+    text-align: center;
+  }
+
+  > p {
+    margin: 20px 0 0;
+    color: $muted;
+    font-size: 0.9rem;
+    text-align: center;
+
+    a {
+      color: $brass-dark;
+      font-weight: 600;
+      text-decoration: none;
+
+      &:hover {
+        text-decoration: underline;
+      }
+    }
+  }
+
+  form {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+}
+
+.input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+
+  label {
+    color: $text;
+    font-size: 0.85rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+
+  input {
+    padding: 12px 14px;
+    border: 1.5px solid $line;
+    border-radius: 2px;
+    outline: none;
+    background: $paper-dim;
+    color: $text;
+    font: inherit;
+    font-size: 1rem;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+
+    &:hover {
+      border-color: $brass;
+    }
+
+    &:focus {
+      border-color: $brass;
+      background: $paper;
+      box-shadow: 0 0 0 3px rgba($brass, 0.2);
+    }
+  }
+}
+
+.button {
+  padding: 12px 20px;
+  border: none;
+  border-radius: 3px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+
+  &:active {
+    animation: button-pop 0.25s ease;
+  }
+
+  &:focus-visible {
+    outline: 2px solid $brass;
+    outline-offset: 3px;
+  }
+}
+
+.primary-button {
+  background: $brass;
+  color: $ink;
+
+  &:hover {
+    background: #c5963b;
+    box-shadow: 0 4px 14px rgba($brass, 0.35);
+  }
+}
+
+.button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.form-error {
+  margin: 0;
+  color: #9b2c21;
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.auth-subtitle {
+  margin: -10px 0 18px;
+  color: $muted;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  text-align: center;
+}
+
+@keyframes button-pop {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(0.93);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
