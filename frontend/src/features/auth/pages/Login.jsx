@@ -92,6 +92,9 @@ function Login() {
         <p>
           <Link to="/forgot-password">Forgot your password?</Link>
         </p>
+        <p>
+          <Link to="/reset-password">Change your password</Link>
+        </p>
       </div>
     </main>
   );

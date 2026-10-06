@@ -18,6 +18,9 @@ authRouter.post('/register',authController.registerUser)
  * @access Public
 */
 authRouter.post('/login',authController.loginUser)
+authRouter.post('/forgot-password', authController.forgotPassword)
+authRouter.post('/verify-reset-otp', authController.verifyPasswordResetOtp)
+authRouter.post('/reset-password', authController.resetPassword)
 /**
  * @route GET api/auth/logout
  * @description logout user and delete token
@@ -33,7 +36,11 @@ authRouter.get('/logout',authController.logoutUser)
 authRouter.get('/get-me',authMiddleWare.authUser,authController.getMe)
 
 /**
- * @rou
+ * @route POST api/auth/change-password
+ * @description change the password of the current loged in user
+ * @access Private
  */
+authRouter.post('/change-password',authMiddleWare.authUser,authController.changePassword)   
+
 
 module.exports=authRouter

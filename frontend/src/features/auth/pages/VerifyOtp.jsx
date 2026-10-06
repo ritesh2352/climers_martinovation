@@ -1,5 +1,6 @@
 import { useLocation, useNavigate, Link } from "react-router";
 import { useState } from "react";
+import { verifyPasswordResetOtp } from "../services/authApi";
 import "./auth.form.scss";
 
 function VerifyOtp() {
@@ -10,7 +11,7 @@ function VerifyOtp() {
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  function handleSubmit(event) {
+  async function handleSubmit(event) {
     event.preventDefault();
     setError("");
 
@@ -26,11 +27,20 @@ function VerifyOtp() {
     }
 
     setSubmitting(true);
-
-    setTimeout(() => {
+    try {
+      const result = await verifyPasswordResetOtp({ email, otp: trimmedOtp });
+      navigate("/reset-password", {
+        replace: true,
+        state: { email, resetToken: result.resetToken },
+      });
+    } catch (requestError) {
+      setError(
+        requestError.response?.data?.message ||
+          "Unable to verify the code. Please try again.",
+      );
+    } finally {
       setSubmitting(false);
-      navigate("/reset-password", { replace: true, state: { email, otp: trimmedOtp } });
-    }, 600);
+    }
   }
 
   return (

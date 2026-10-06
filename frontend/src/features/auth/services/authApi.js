@@ -17,7 +17,7 @@ export async function register({ email, userName, password }) {
 
 export async function login({ email, password }) {
   const response = await api.post("/api/auth/login", { email, password });
-  console.log()
+  console.log(response.data);
   return response.data;
 }
 
@@ -33,5 +33,27 @@ export async function getMe() {
 
 export async function forgotPassword({ email }) {
   const response = await api.post("/api/auth/forgot-password", { email });
+  return response.data;
+}
+
+export async function verifyPasswordResetOtp({ email, otp }) {
+  const response = await api.post("/api/auth/verify-reset-otp", { email, otp });
+  return response.data;
+}
+
+export async function resetPassword({ token, newPassword }) {
+  const response = await api.post("/api/auth/reset-password", {
+    token,
+    newPassword,
+  });
+  return response.data;
+}
+
+export async function changePassword({ email, currentPassword, newPassword }) {
+  const response = await api.post("/api/auth/change-password", {
+    email,
+    currentPassword,
+    newPassword,
+  });
   return response.data;
 }

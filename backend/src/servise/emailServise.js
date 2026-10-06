@@ -53,7 +53,6 @@ const sendEmail = async (to, subject, text, html) => {
 
   try {
     const info = await transporter.sendMail(mailOptions);
-    console.log("Email sent:", info.response);
     return info;
   } catch (error) {
     console.error("Error sending email:", error);
@@ -89,6 +88,18 @@ const sendLoginNotificationEmail = async (userEmail, name) => {
   await sendEmail(userEmail, subject, text, html);
 };
 
+const sendPasswordResetOtp = async (userEmail, otp) => {
+  const subject = "Your password reset code";
+  const text = `Your password reset code is ${otp}. It expires in 10 minutes. If you did not request this, you can ignore this email.`;
+  const html = `
+    <p>Your password reset code is:</p>
+    <p style="font-size:24px;font-weight:bold;letter-spacing:6px">${otp}</p>
+    <p>This code expires in 10 minutes. If you did not request this, you can ignore this email.</p>
+  `;
+
+  await sendEmail(userEmail, subject, text, html);
+};
+
 const sendFailedAttemptsWarningEmail = async (userEmail, attempts) => {
   const subject = "Security Alert: Multiple Failed Login Attempts";
   const text = `Hello ${userEmail}, we detected ${attempts} failed login attempts on your account. If this wasn't you, please reset your password. Your account will be frozen after 5 failed attempts.`;
@@ -113,4 +124,12 @@ const sendAccountFrozenEmail = async (userEmail, minutes) => {
 
 
 
-module.exports = { sendEmail, sendRegistrationEmail, sendLoginNotificationEmail, sendPasswordResetEmail, sendFailedAttemptsWarningEmail, sendAccountFrozenEmail };
+module.exports = {
+  sendEmail,
+  sendRegistrationEmail,
+  sendLoginNotificationEmail,
+  sendPasswordResetEmail,
+  sendPasswordResetOtp,
+  sendFailedAttemptsWarningEmail,
+  sendAccountFrozenEmail,
+};

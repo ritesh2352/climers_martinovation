@@ -3,9 +3,31 @@ const userModel = require("../models/userModel");
 const tokenBlackListModel = require("../models/tokenBlackListModel");
 const { getClientInfo } = require("../utils/clientInfo");
 const FailedLogin = require("../models/falidModel");
-const  { sendRegistrationEmail,sendLoginNotificationEmail ,sendFailedAttemptsWarningEmail, sendAccountFrozenEmail } =require("../servise/emailServise");
+const PasswordReset = require("../models/passwordResetModel");
+const {
+  sendRegistrationEmail,
+  sendLoginNotificationEmail,
+  sendPasswordResetOtp,
+  sendFailedAttemptsWarningEmail,
+  sendAccountFrozenEmail,
+} = require("../servise/emailServise");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const crypto = require("crypto");
+
+const OTP_LIFETIME_MS = 10 * 60 * 1000;
+const RESET_TOKEN_LIFETIME_MS = 10 * 60 * 1000;
+const MAX_OTP_ATTEMPTS = 5;
+
+function hashResetValue(value) {
+  if (!process.env.JWT_SECRET) {
+    throw new Error("JWT_SECRET is not configured");
+  }
+  return crypto
+    .createHmac("sha256", process.env.JWT_SECRET)
+    .update(value)
+    .digest("hex");
+}
 
 const isProd = process.env.NODE_ENV === "production";
 
@@ -132,8 +154,7 @@ async function loginUser(req, res) {
       ...recentFailures,
       email: normalizedEmail,
     });
-    console.log(`Failed login attempts in the last 30 seconds - IP: ${ipFails}, Device: ${deviceFails}, User: ${userFails}`,
-    );
+   
  if(userFails >=0){
   await sendFailedAttemptsWarningEmail(normalizedEmail, userFails);
  }
@@ -234,4 +255,201 @@ async function getMe(req, res) {
   }
 }
 
-module.exports = { registerUser, loginUser, logoutUser, getMe };
+async function forgotPassword(req, res) {
+  try {
+    const { email } = req.body || {};
+    if (typeof email !== "string" || !email.trim()) {
+      return res.status(400).json({ message: "Please provide your email address." });
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+    const user = await userModel.findOne({ email: normalizedEmail });
+    if (!user) {
+      return res.status(404).json({ message: "No account was found for that email address." });
+    }
+
+    const now = Date.now();
+    let challenge = await PasswordReset.findOne({ email: normalizedEmail });
+    if (challenge && now - challenge.createdAt.getTime() < 60_000) {
+      return res.status(429).json({ message: "Please wait before requesting another code." });
+    }
+
+    const otp = crypto.randomInt(0, 1_000_000).toString().padStart(6, "0");
+    challenge = await PasswordReset.findOneAndUpdate(
+      { email: normalizedEmail },
+      {
+        $set: {
+          otpHash: hashResetValue(otp),
+          otpExpiresAt: new Date(now + OTP_LIFETIME_MS),
+          otpAttempts: 0,
+          resetTokenHash: null,
+          resetTokenExpiresAt: null,
+        },
+      },
+      { upsert: true, new: true, setDefaultsOnInsert: true },
+    );
+
+    try {
+      await sendPasswordResetOtp(normalizedEmail, otp);
+    } catch (emailError) {
+      await PasswordReset.deleteOne({ _id: challenge._id });
+      throw emailError;
+    }
+
+    return res.status(200).json({ message: "A password reset code has been sent to your email." });
+  } catch (error) {
+    console.error("Password reset email failed:", error);
+    return res.status(500).json({ message: "Unable to send the reset code. Please try again later." });
+  }
+}
+
+async function verifyPasswordResetOtp(req, res) {
+  try {
+    const { email, otp } = req.body || {};
+    if (
+      typeof email !== "string" ||
+      typeof otp !== "string" ||
+      !email.trim() ||
+      !/^\d{6}$/.test(otp)
+    ) {
+      return res.status(400).json({ message: "Please provide your email and 6-digit code." });
+    }
+
+    const challenge = await PasswordReset.findOne({
+      email: email.trim().toLowerCase(),
+      otpExpiresAt: { $gt: new Date() },
+    });
+    if (!challenge?.otpHash) {
+      return res.status(400).json({ message: "The code is invalid or expired. Request a new one." });
+    }
+    if (challenge.otpAttempts >= MAX_OTP_ATTEMPTS) {
+      return res.status(429).json({ message: "Too many incorrect codes. Request a new one." });
+    }
+
+    const submittedHash = Buffer.from(hashResetValue(otp), "hex");
+    const storedHash = Buffer.from(challenge.otpHash, "hex");
+    if (
+      submittedHash.length !== storedHash.length ||
+      !crypto.timingSafeEqual(submittedHash, storedHash)
+    ) {
+      challenge.otpAttempts += 1;
+      await challenge.save();
+      return res.status(400).json({ message: "The code is incorrect." });
+    }
+
+    const resetToken = crypto.randomBytes(32).toString("hex");
+    const resetTokenExpiresAt = new Date(Date.now() + RESET_TOKEN_LIFETIME_MS);
+    challenge.otpHash = undefined;
+    challenge.resetTokenHash = hashResetValue(resetToken);
+    challenge.resetTokenExpiresAt = resetTokenExpiresAt;
+    challenge.otpExpiresAt = resetTokenExpiresAt;
+    await challenge.save();
+
+    return res.status(200).json({ message: "Code verified.", resetToken });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: "server error" });
+  }
+}
+
+async function resetPassword(req, res) {
+  try {
+    const { token, newPassword } = req.body || {};
+    if (typeof token !== "string" || typeof newPassword !== "string" || !token || !newPassword) {
+      return res.status(400).json({ message: "Please provide the reset token and new password." });
+    }
+    if (newPassword.length < 8) {
+      return res.status(400).json({ message: "Password must be at least 8 characters." });
+    }
+
+    const filter = {
+      resetTokenHash: hashResetValue(token),
+      resetTokenExpiresAt: { $gt: new Date() },
+    };
+
+    // 1. Look up without consuming
+    const challenge = await PasswordReset.findOne(filter);
+    if (!challenge) {
+      return res.status(400).json({ message: "The reset session is invalid or expired. Request a new code." });
+    }
+
+    const user = await userModel.findOne({ email: challenge.email });
+    if (!user) {
+      await PasswordReset.deleteOne({ _id: challenge._id });
+      return res.status(404).json({ message: "The account could not be found." });
+    }
+
+    // 2. Validate before burning the token
+    if (user.password && (await bcrypt.compare(newPassword, user.password))) {
+      return res.status(400).json({ message: "Choose a new password different from your current one." });
+    }
+
+    // 3. Atomically consume the token (prevents double use under concurrent requests)
+    const consumed = await PasswordReset.findOneAndUpdate(
+      { _id: challenge._id, ...filter },
+      { $unset: { resetTokenHash: 1, resetTokenExpiresAt: 1, otpHash: 1 } },
+      { returnDocument: "after" },
+    );
+    if (!consumed) {
+      return res.status(400).json({ message: "The reset session is invalid or expired. Request a new code." });
+    }
+
+    user.password = await bcrypt.hash(newPassword, 10);
+    await user.save();
+    await PasswordReset.deleteOne({ _id: challenge._id });
+
+    // 4. Optionally revoke existing sessions/refresh tokens here
+
+    return res.status(200).json({ message: "Password reset successfully." });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: "server error" });
+  }
+}
+
+async function changePassword(req, res) {
+  try {
+    const { email, currentPassword, newPassword } = req.body || {};
+   
+    if (
+      typeof email !== "string" ||
+      typeof currentPassword !== "string" ||  
+      typeof newPassword !== "string" ||
+      !email.trim() ||
+      !currentPassword ||
+      !newPassword
+    ) {
+      return res.status(400).json({ message: "Please provide all password fields." });
+    }
+    if (newPassword.length < 8) {
+      return res.status(400).json({ message: "Password must be at least 8 characters." });
+    }
+
+    const user = await userModel.findOne({ email: email.trim().toLowerCase() });
+    if (!user || !(await bcrypt.compare(currentPassword, user.password))) {
+      return res.status(401).json({ message: "Invalid email or current password." });
+    }
+    if (await bcrypt.compare(newPassword, user.password)) {
+      return res.status(400).json({ message: "Choose a new password different from your current one." });
+    }
+
+    user.password = await bcrypt.hash(newPassword, 10);
+    await user.save();
+
+    return res.status(200).json({ message: "Password changed successfully." });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: "server error" });
+  }
+}
+
+module.exports = {
+  registerUser,
+  loginUser,
+  logoutUser,
+  getMe,
+  forgotPassword,
+  verifyPasswordResetOtp,
+  resetPassword,
+  changePassword,
+};
